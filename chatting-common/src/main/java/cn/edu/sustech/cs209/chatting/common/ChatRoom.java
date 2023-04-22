@@ -7,10 +7,19 @@ public class ChatRoom {
     private int roomId;
     private CopyOnWriteArrayList<String> userList;
     private CopyOnWriteArrayList<String> allMessage;
+    private String tempMessage;
     public ChatRoom (int roomId, CopyOnWriteArrayList<String> userList, CopyOnWriteArrayList<String> allMessage){
         this.roomId = roomId;
         this.allMessage = allMessage;
         this.userList = userList;
+    }
+
+    public String getTempMessage() {
+        return tempMessage;
+    }
+
+    public void setTempMessage(String tempMessage) {
+        this.tempMessage = tempMessage;
     }
 
     public int getRoomId() {

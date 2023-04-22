@@ -20,6 +20,7 @@ public class Message {
     private ChatRoom chatRoom;
     private CopyOnWriteArrayList<String> nowUserList;
     private CopyOnWriteArrayList<PieceMessage> allHistoryMessage;
+    private CopyOnWriteArrayList<ChatRoom> roomlist;
 
 
 
@@ -30,6 +31,14 @@ public class Message {
         this.sendTo = sendTo;
         this.data = data;
         this.type = type;
+    }
+
+    public CopyOnWriteArrayList<ChatRoom> getRoomlist() {
+        return roomlist;
+    }
+
+    public void setRoomlist(CopyOnWriteArrayList<ChatRoom> roomlist) {
+        this.roomlist = roomlist;
     }
 
     public void setAllHistoryMessage(CopyOnWriteArrayList<PieceMessage> allHistoryMessage) {

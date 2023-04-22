@@ -27,7 +27,7 @@ public class Utils {
         Connection conn = connection.getCon();
         try {
             Statement statement = conn.createStatement();
-            String sql = "select * from userinfo where userName = '" + name + "'";
+            String sql = "select * from userinfo where userName = '" + name + "';";
             ResultSet rs = statement.executeQuery(sql);
             if (rs.next()) {
                 return true;
@@ -67,7 +67,7 @@ public class Utils {
         try {
             Statement statement = conn.createStatement();
             if (hasSignIn(name)) {
-                String sql = "select * from userinfo where userName = '" + name + "' and userPWD = '" + password + "'";
+                String sql = "select * from userinfo where userName = '" + name + "' and userPWD = '" + password + "';";
                 ResultSet rs = statement.executeQuery(sql);
                 if (rs.next()) {
                     return true;
@@ -94,7 +94,7 @@ public class Utils {
         Connection conn = connection.getCon();
         String allUser = null;
         try {
-            PreparedStatement stmt = conn.prepareStatement("SELECT alluser FROM chatroom WHERE roomid = ? limit 1");
+            PreparedStatement stmt = conn.prepareStatement("SELECT alluser FROM chatroom WHERE roomid = ? limit 1;");
             stmt.setInt(1, roomId);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
@@ -111,14 +111,14 @@ public class Utils {
     /**
      * 根据房间号获取所有历史消息
      */
-    public CopyOnWriteArrayList<PieceMessage> getHistoryMessageByRoomId(int roomId){
+    public CopyOnWriteArrayList<PieceMessage> getHistoryMessageByAllUser(String alluser){
         Connection conn = connection.getCon();
         CopyOnWriteArrayList<PieceMessage> allMessage = new CopyOnWriteArrayList<>();
         try {
-            PreparedStatement stmt = conn.prepareStatement("SELECT * from chatroom where roomid = ?");
-            stmt.setInt(1, roomId);
+            PreparedStatement stmt = conn.prepareStatement("SELECT * from chatroom where alluser = ?;");
+            stmt.setString(1,alluser);
             ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
+            while (rs.next()) {
                 PieceMessage message = new PieceMessage(rs.getInt(1),
                         rs.getString(2),
                         rs.getString(3),
@@ -132,6 +132,32 @@ public class Utils {
             e.printStackTrace();
         }
         return allMessage;
+    }
+
+    /**
+     *根据用户名获取所有房间
+     */
+    public CopyOnWriteArrayList<ChatRoom> getAllRoomByName(String name){
+        Connection conn = connection.getCon();
+        try {
+            PreparedStatement stmt = conn.prepareStatement("SELECT roomid, alluser from chatroom where alluser like ? order by roomid;");
+            stmt.setString(1,"%"+name+"%");
+            ResultSet rs = stmt.executeQuery();
+            CopyOnWriteArrayList<ChatRoom> roomlist = new CopyOnWriteArrayList<>();
+            while (rs.next()) {
+                String alluser = rs.getString(2);
+                CopyOnWriteArrayList<String> list = string_to_copylist(alluser);
+                ChatRoom temp = new ChatRoom(rs.getInt(1),list,null);
+                roomlist.add(temp);
+            }
+            rs.close();
+            stmt.close();
+            return roomlist;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+
     }
 
     /**
@@ -157,6 +183,12 @@ public class Utils {
             e.printStackTrace();
         }
     }
+
+    /**
+     *
+     * @param list
+     * @return
+     */
 
     public String copyList_to_String(CopyOnWriteArrayList<String> list){
         StringBuilder result = null;

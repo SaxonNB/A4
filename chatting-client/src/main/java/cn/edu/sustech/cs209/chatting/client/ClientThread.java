@@ -1,15 +1,20 @@
 package cn.edu.sustech.cs209.chatting.client;
 
+import cn.edu.sustech.cs209.chatting.common.ChatRoom;
 import cn.edu.sustech.cs209.chatting.common.Message;
 import cn.edu.sustech.cs209.chatting.common.MessageType;
+import javafx.application.Platform;
+import javafx.collections.FXCollections;
 
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Scanner;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ClientThread implements Runnable {
     //用户名
@@ -30,6 +35,7 @@ public class ClientThread implements Runnable {
     private Scanner in;
     private PrintWriter out;
     private Controller controller;
+    private static String currentRoom;
 
     public void setExit(boolean exit) {
         this.exit = exit;
@@ -55,7 +61,7 @@ public class ClientThread implements Runnable {
         return userPassword;
     }
 
-    public volatile boolean exit = false;
+    public boolean exit = false;
 
 
     public ClientThread(String hostname, int port, String username, String userPassword, Controller controller) {
@@ -83,8 +89,9 @@ public class ClientThread implements Runnable {
                     System.out.println("本机已成功连接服务器！下一步用户登录..");
                 }
                 connect();
-                System.out.println(!s.isClosed()+" "+ s.isConnected() +" "+!exit);
+
                 while (!s.isClosed() && s.isConnected()  && !exit) {
+                    //System.out.println(!s.isClosed()+" "+ s.isConnected() +" "+!exit);
                     String serverMessage = br.readLine();
                     // System.out.println(serverMessage);
                     if (serverMessage != null) {
@@ -93,6 +100,7 @@ public class ClientThread implements Runnable {
                         switch (message.getType()) {
                             case SUCCESS:
                                 controller.setClientThread(this);
+                              //  System.out.println(message.getNowUserList());
                                 controller.setOnlineUserList(message.getNowUserList());
                                 System.out.println("用户登录成功！");
                                 break;
@@ -101,6 +109,26 @@ public class ClientThread implements Runnable {
                                 controller.failLogin();
                                 s.close();
                                 break;
+                            case NEWCLIENTJION:
+                                System.out.println("新用户加入，更新在线用户列表");
+                                controller.setOnlineUserList(message.getNowUserList());
+                                break;
+                            case SOMEONELEAVE:
+                                System.out.println("有用户退出，更新在线列表");
+                                controller.setOnlineUserList(message.getNowUserList());
+                                break;
+                            case REFRESHCHATTHINGWINDOWS:
+                                System.out.println("更新聊天界面");
+                                break;
+                            case REFRESHCHATLIST:
+                                System.out.println("更新聊天列表");
+                                CopyOnWriteArrayList<ChatRoom> rooms = message.getRoomlist();
+                                ArrayList<String> roomnameByNumbers = new ArrayList<>();
+                                for (ChatRoom room : rooms) {
+                                    roomnameByNumbers.add(list_to_string(room.getUserList()));
+                                }
+                               controller.refreshChatList(roomnameByNumbers);
+
                             default:
                                 break;
                         }
@@ -109,14 +137,14 @@ public class ClientThread implements Runnable {
 
             } catch (SocketTimeoutException ex) {
                 ex.printStackTrace();
-           /* logger.info("{} 连接超时！",s);
-            loginController.setResultText(s+"连接超时！");*/
             } catch (Exception e) {
                 e.printStackTrace();
-/*
-            logger.info("{} 连接错误！",s);
-            loginController.setResultText(s+"连接错误！");*/
-
+            }finally {
+                try {
+                    s.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
 
@@ -144,6 +172,15 @@ public class ClientThread implements Runnable {
         String JSON = Message.toJson(message);
         System.out.println("发送的消息内容：{} " + JSON);
         ps.println(JSON);
+    }
+
+    public static String list_to_string(CopyOnWriteArrayList<String> list){
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < list.size()-1; i++) {
+            s.append(list.get(i));
+        }
+        s.append(list.get(list.size()-1));
+        return s.toString();
     }
 
 }

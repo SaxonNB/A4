@@ -11,7 +11,10 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -37,14 +40,14 @@ public class Server {
     private static class ServerThread implements Runnable {
         private Server server;
         private CopyOnWriteArrayList<ChatRoom> roomList = new CopyOnWriteArrayList<>();
-        private ConcurrentHashMap<String, ChatRoom> map = new ConcurrentHashMap<>();
+        private static ConcurrentHashMap<String, ChatRoom> map = new ConcurrentHashMap<>();
         //用户名与client的hashmap
         private static ConcurrentHashMap<String, PrintWriter> name_To_printer = new ConcurrentHashMap<>();
         //连接服务器的客户端列表
         private static CopyOnWriteArrayList<String> clientList = new CopyOnWriteArrayList<>();
         private Socket socket = null;
-        private static Scanner in;
-        private static PrintWriter selfout;
+        private Scanner in;
+        private PrintWriter selfout;
         private String User;
         private static Utils jdbc = new Utils();
 
@@ -61,12 +64,14 @@ public class Server {
             try {
                 in = new Scanner(socket.getInputStream());
                 selfout = new PrintWriter(socket.getOutputStream());
-                doService();
+                doService(in, selfout);
             } catch (SocketException se) { /*处理用户断开的异常*/
                 System.out.println("处理用户断开的异常");
 
             } catch (IOException e) {
                 e.printStackTrace();
+            } catch (ParseException e) {
+                throw new RuntimeException(e);
             } finally {
                 try {
                     socket.close();
@@ -79,8 +84,10 @@ public class Server {
 
         }
 
-        public static void doService() {
+        public static void doService(Scanner in, PrintWriter selfout) throws ParseException {
+            exit:
             while (true) {
+                System.out.println(in.hasNext());
                 if (in.hasNext()) {
                     String line = in.nextLine();
                     Message message = Message.fromJson(line);
@@ -96,19 +103,23 @@ public class Server {
                          * 给所有在线用户发消息，更新在线用户列表
                          */
                         case CONNECT:
-                            System.out.println(clientList);
+                            // System.out.println(clientList);
                             if (!clientList.contains(username)) {
                                 if (jdbc.hasSignIn(username) && jdbc.isMember(username, password)) {
                                     clientList.add(username);
                                     tempMessage = new Message(System.currentTimeMillis(), username, password, username, "", MessageType.SUCCESS);
                                     tempMessage.setNowUserList(clientList);
+                                    System.out.println(clientList);
+                                    send(tempMessage, selfout);
+                                    tempMessage = new Message(System.currentTimeMillis(), null, null, null, null, MessageType.REFRESHCHATLIST);
+                                    tempMessage.setRoomlist(jdbc.getAllRoomByName(username));
                                     send(tempMessage, selfout);
                                     Message message1 = new Message(System.currentTimeMillis(), username, null, null, "", MessageType.NEWCLIENTJION);
                                     message1.setNowUserList(clientList);
                                     outputStreams.add(selfout);
-                                    name_To_printer.put(username,selfout);
-                                   // System.out.println(name_To_printer+"??????");
-                                    sendAllExceptSelf(message1);
+                                    name_To_printer.put(username, selfout);
+                                    // System.out.println(name_To_printer+"??????");
+                                    sendAllExceptSelf(message1, selfout);
                                 } else if (!jdbc.hasSignIn(username)) {
                                     clientList.add(username);
                                     tempMessage = new Message(System.currentTimeMillis(), username, password, username, "", MessageType.SUCCESS);
@@ -118,9 +129,9 @@ public class Server {
                                     Message message1 = new Message(System.currentTimeMillis(), username, null, null, "", MessageType.NEWCLIENTJION);
                                     message1.setNowUserList(clientList);
                                     outputStreams.add(selfout);
-                                    name_To_printer.put(username,selfout);
-                                  //  System.out.println(name_To_printer+"??????");
-                                    sendAllExceptSelf(message1);
+                                    name_To_printer.put(username, selfout);
+                                    //  System.out.println(name_To_printer+"??????");
+                                    sendAllExceptSelf(message1, selfout);
                                 }
                             } else {
                                 tempMessage = new Message(System.currentTimeMillis(), username, password, username, "", MessageType.FAIL);
@@ -141,34 +152,47 @@ public class Server {
                             name_To_printer.remove(username);
                             clientList.remove(username);
                             outputStreams.remove(selfout);
-                            message.setNowUserList(nowUserList);
-                            sendAllExceptSelf(message);
-                            break;
+                            message.setNowUserList(clientList);
+                            sendAllExceptSelf(message, selfout);
+                            System.out.println("duankai");
+                            break exit;
+
                         /**
                          * 将消息添加到数据库
                          * 将该聊天室的所有聊天记录从数据库读出
                          * 判断toname端是否在线，若在线，给toname端发送聊天室所有消息
                          */
                         case SENDMESSAGE:
-                            int roomId = message.getChatRoom().getRoomId();
-                            String fromname = message.getSentFrom();
-                            CopyOnWriteArrayList<String> toname = message.getChatRoom().getUserList();
-                            int roomid = message.getChatRoom().getRoomId();
                             jdbc.addMessageToDatabase(message);
-                            CopyOnWriteArrayList<PieceMessage> historyMessage = jdbc.getHistoryMessageByRoomId(roomId);
+                            CopyOnWriteArrayList<String> toname = message.getChatRoom().getUserList();
+                            String alluser = jdbc.copyList_to_String(toname);
+                            CopyOnWriteArrayList<PieceMessage> allMessage = jdbc.getHistoryMessageByAllUser(alluser);
                             for (int i = 0; i < toname.size(); i++) {
                                 String tempName = toname.get(i);
                                 Message message1 = new Message(System.currentTimeMillis(), null, null, tempName, null, MessageType.REFRESHCHATTHINGWINDOWS);
-                                message1.setAllHistoryMessage(historyMessage);
-                                name_To_printer.get(tempName).println();
-                                name_To_printer.get(tempName).flush();
+                                message1.setAllHistoryMessage(allMessage);
+                                if (clientList.contains(tempName)) {
+                                    name_To_printer.get(tempName).println();
+                                    name_To_printer.get(tempName).flush();
+                                }
                             }
                             break;
                         /**
                          * 创建新的聊天
+                         * 将聊天室加到数据库
+                         * 此时聊天室的所有人一定在线
+                         * 给聊天室中在线用户发消息，添加一个room
                          */
                         case CREATNEWROOM:
+                            jdbc.addMessageToDatabase(message);
+                            CopyOnWriteArrayList<String> roomUsers = message.getChatRoom().getUserList();
+                            String allusers = jdbc.copyList_to_String(roomUsers);
+                            CopyOnWriteArrayList<PieceMessage> allMessages = jdbc.getHistoryMessageByAllUser(allusers);
 
+                            Message message2 = new Message(message.getTimestamp(), message.getSentFrom(), null, null, null, MessageType.REFRESHCHATLIST);
+                            ChatRoom chatRoom = new ChatRoom(message.getChatRoom().getRoomId(), roomUsers, pieceList_to_stringList(allMessages));
+                            message2.setChatRoom(chatRoom);
+                            sendToMany(message2, roomUsers);
                             break;
 
 
@@ -176,13 +200,50 @@ public class Server {
                             break;
                     }
 
-
                 } else {
-                    System.out.println("0000000000000");
+                    // System.out.println("0000000000000");
                     return;
                 }
             }
+            System.out.println("jieshu");
         }
+
+
+        /**
+         * 将copylist《piece》 转为 copylist《String》
+         */
+        public static CopyOnWriteArrayList<String> pieceList_to_stringList(CopyOnWriteArrayList<PieceMessage> pieceList) throws ParseException {
+            CopyOnWriteArrayList<String> result = new CopyOnWriteArrayList<>();
+            for (PieceMessage temp : pieceList) {
+                String a = longToDate(temp.getSendtime()).toString();
+                a += "     " + temp.getFrom() + "说： ";
+                a += temp.getContent();
+                result.add(a);
+            }
+            return result;
+        }
+
+
+        public static Date longToDate(long lo) throws ParseException {
+            SimpleDateFormat sd = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            //long转Date
+            Date date = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(sd.format(new Date(lo)));
+            return date;
+        }
+
+
+        /**
+         * 向指定一组用户发消息
+         */
+        public static void sendToMany(Message message, CopyOnWriteArrayList<String> list) {
+            for (int i = 0; i < list.size(); i++) {
+                String temp = list.get(i);
+                if (clientList.contains(temp)) {
+                    send(message, name_To_printer.get(temp));
+                }
+            }
+        }
+
 
         /**
          * 发送消息
@@ -197,7 +258,8 @@ public class Server {
          * 向除自己以外所有人发消息
          */
 
-        public static void sendAllExceptSelf(Message message) {
+        public static void sendAllExceptSelf(Message message, PrintWriter selfout) {
+
             for (PrintWriter out : outputStreams) {
                 if (!out.equals(selfout)) {
                     send(message, out);

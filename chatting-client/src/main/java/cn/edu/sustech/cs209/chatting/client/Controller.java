@@ -18,9 +18,11 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.WindowEvent;
 import javafx.util.Callback;
@@ -58,6 +60,7 @@ public class Controller implements Initializable {
     String username;
     String password;
     Socket socket;
+    private static int chatroomId;
     private static FileInputStream fileIn;
     private static DataOutputStream DataOUT;
     public static ClientThread clientThread;
@@ -116,7 +119,7 @@ public class Controller implements Initializable {
             if (dialogButton == loginButtonType) {
                 String username = usernameField.getText();
                 String password = passwordField.getText();
-                System.out.println(username + "  " + password);
+                //System.out.println(username + "  " + password);
                 if (!username.isEmpty() && !password.isEmpty()) {
                     // 开始一个新线程
                     clientThread = new ClientThread("127.0.0.1", 8588, username, password, this);
@@ -124,7 +127,7 @@ public class Controller implements Initializable {
                     thread.start();
                 } else {
                     // 关闭当前Stage并退出应用程序
-                    System.out.println("空");
+                    // System.out.println("空");
                     Alert alert = new Alert(Alert.AlertType.ERROR);
                     alert.setTitle("Error");
                     alert.setHeaderText(null);
@@ -189,6 +192,7 @@ public class Controller implements Initializable {
     public void setOnlineUserList(CopyOnWriteArrayList<String> onlineUserList) {
 
         this.onlineUserList = onlineUserList;
+        CopyOnWriteArrayList<String> tmeplsit = onlineUserList;
 		/*
 		System.out.print("UserList:");
 		for(UserInfo user: userInfolist){
@@ -209,7 +213,7 @@ public class Controller implements Initializable {
         //设置在线用户列表
         Platform.runLater(() -> {
 
-            //数据源
+            /*//数据源
             ObservableList<String> users = FXCollections.observableList(onlineUserList);
             onlineUsersList.setItems(users);
             //自定义ListView
@@ -217,9 +221,12 @@ public class Controller implements Initializable {
 
             // Add items to the list
             onlineUsersList.getItems().addAll(onlineUserList);
-
+*/
             //设置在线用户人数
             currentOnlineCnt.setText(userCount + "");
+            System.out.println(onlineUserList + "   66666");
+            onlineUsersList.setItems(FXCollections.observableArrayList(onlineUserList));
+
         });
     }
 
@@ -248,60 +255,83 @@ public class Controller implements Initializable {
     public void shutdown() throws IOException {
         Message message = new Message(System.currentTimeMillis(), username, null, null, null, MessageType.DISCONNECT);
         if (clientThread != null) {
+            System.out.println("111111111111");
             clientThread.send(message);
-            clientThread.getS().close();
             clientThread.setExit(true);
+            //clientThread.getS().close();
+            thread.interrupt();
         }
         System.exit(0);
     }
 
+    public void refreshChatList(ArrayList<String> list){
+        Platform.runLater(()->{
+            chatList.setItems(FXCollections.observableArrayList(list));
+
+        });
+    }
+
     @FXML
-    public void createPrivateChat() {
-        AtomicReference<String> user = new AtomicReference<>();
+    public void createChat() {
+        // 获取所有在线用户列表，假设为List<String> allUsers
+        CopyOnWriteArrayList<String> allUsers = onlineUserList;
 
+        // 弹出窗口，让用户选择要邀请的人
         Stage stage = new Stage();
-        ComboBox<String> userSel = new ComboBox<>();
+        stage.initModality(Modality.APPLICATION_MODAL);
 
-        // FIXME: get the user list from server, the current user's name should be filtered out
-        userSel.getItems().addAll("Item 1", "Item 2", "Item 3");
+        VBox vBox = new VBox();
+        vBox.setPadding(new Insets(20));
+
+        Label label = new Label("Select users to join the group chat:");
+        vBox.getChildren().add(label);
+
+        // 创建一个 CheckBox 列表，用于选择用户
+        List<CheckBox> checkBoxList = new ArrayList<>();
+        for (String user : allUsers) {
+            if (!user.equals(username)) {
+                CheckBox checkBox = new CheckBox(user);
+                checkBoxList.add(checkBox);
+                vBox.getChildren().add(checkBox);
+            }
+        }
 
         Button okBtn = new Button("OK");
         okBtn.setOnAction(e -> {
-            user.set(userSel.getSelectionModel().getSelectedItem());
+            // 获取选择的用户，创建群聊
+            int x = 0;
+            CopyOnWriteArrayList<String> selectedUsers = new CopyOnWriteArrayList<>();
+            for (CheckBox checkBox : checkBoxList) {
+                if (checkBox.isSelected()) {
+                    x++;
+                    selectedUsers.add(checkBox.getText());
+                }
+            }
+            if (x > 0) {
+                selectedUsers.add(username);
+                Message message = new Message(System.currentTimeMillis(), username, null, null, username+"创建了群聊", MessageType.CREATNEWROOM);
+                ChatRoom tempRoom = new ChatRoom(new Random().nextInt(2000000000),selectedUsers,null);
+                message.setChatRoom(tempRoom);
+                clientThread.send(message);
+
+            } else {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setTitle("Error");
+                alert.setHeaderText("renshubugou");
+                alert.setContentText("人数不够，请选择至少1人");
+                alert.showAndWait();
+            }
+            // 在这里创建群聊，将 selectedUsers 传入即可
+
             stage.close();
         });
+        vBox.getChildren().add(okBtn);
 
-        HBox box = new HBox(10);
-        box.setAlignment(Pos.CENTER);
-        box.setPadding(new Insets(20, 20, 20, 20));
-        box.getChildren().addAll(userSel, okBtn);
-        stage.setScene(new Scene(box));
+        Scene scene = new Scene(vBox);
+        stage.setScene(scene);
         stage.showAndWait();
-
-        // TODO: if the current user already chatted with the selected user, just open the chat with that user
-        // TODO: otherwise, create a new chat item in the left panel, the title should be the selected user's name
     }
 
-    /**
-     * A new dialog should contain a multi-select list, showing all user's name.
-     * You can select several users that will be joined in the group chat, including yourself.
-     * <p>
-     * The naming rule for group chats is similar to WeChat:
-     * If there are > 3 users: display the first three usernames, sorted in lexicographic order, then use ellipsis with the number of users, for example:
-     * UserA, UserB, UserC... (10)
-     * If there are <= 3 users: do not display the ellipsis, for example:
-     * UserA, UserB (2)
-     */
-    @FXML
-    public void createGroupChat() {
-    }
-
-    /**
-     * Sends the message to the <b>currently selected</b> chat.
-     * <p>
-     * Blank messages are not allowed.
-     * After sending the message, you should clear the text input field.
-     */
     @FXML
     public void doSendMessage() {
         // TODO
@@ -360,6 +390,13 @@ public class Controller implements Initializable {
         }
     }
 
+    /**
+     * 更新聊天室列表
+     */
+
+    /**
+     * @param clientThread
+     */
 
     public void setClientThread(ClientThread clientThread) {
         this.clientThread = clientThread;
