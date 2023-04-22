@@ -2,6 +2,9 @@ package cn.edu.sustech.cs209.chatting.common;
 
 import com.google.gson.Gson;
 
+import java.util.ArrayList;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 public class Message {
 
     private Long timestamp;
@@ -14,6 +17,9 @@ public class Message {
     private String data;
 
     private MessageType type;
+    private ChatRoom chatRoom;
+    private CopyOnWriteArrayList<String> nowUserList;
+    private CopyOnWriteArrayList<PieceMessage> allHistoryMessage;
 
 
 
@@ -24,6 +30,30 @@ public class Message {
         this.sendTo = sendTo;
         this.data = data;
         this.type = type;
+    }
+
+    public void setAllHistoryMessage(CopyOnWriteArrayList<PieceMessage> allHistoryMessage) {
+        this.allHistoryMessage = allHistoryMessage;
+    }
+
+    public CopyOnWriteArrayList<PieceMessage> getAllHistoryMessage() {
+        return allHistoryMessage;
+    }
+
+    public CopyOnWriteArrayList<String> getNowUserList() {
+        return nowUserList;
+    }
+
+    public void setNowUserList(CopyOnWriteArrayList<String> nowUserList) {
+        this.nowUserList = nowUserList;
+    }
+
+    public void setChatRoom(ChatRoom chatRoom) {
+        this.chatRoom = chatRoom;
+    }
+
+    public ChatRoom getChatRoom() {
+        return chatRoom;
     }
 
     public MessageType getType() {

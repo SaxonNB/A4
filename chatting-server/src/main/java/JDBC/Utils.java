@@ -1,10 +1,15 @@
 package JDBC;
 
 
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import cn.edu.sustech.cs209.chatting.common.ChatRoom;
+import cn.edu.sustech.cs209.chatting.common.Message;
+import cn.edu.sustech.cs209.chatting.common.PieceMessage;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Random;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 对数据库的操作
@@ -73,7 +78,7 @@ public class Utils {
             }else {
                 signIn(name,password);
                 statement.close();
-                conn.close();
+                //conn.close();
                 return true;
             }
         } catch (SQLException e) {
@@ -83,85 +88,91 @@ public class Utils {
     }
 
     /**
-     * 返回登陆用户的好友信息
-     *
-     * @param connections
-     * @param userBean
-     * @return
+     * 根据room查询所有信息
      */
-   /* public ResultSet isMyFri(Connections connections, UserBean userBean) {
-        Connection conn = connections.getCon();
-        Statement statement;
-        ResultSet rs = null;
+    public CopyOnWriteArrayList<String> getAllUserByRoomId(int roomId) {
+        Connection conn = connection.getCon();
+        String allUser = null;
         try {
-            statement = conn.createStatement();
-            String sql = "select * from friends where username = '" + userBean.getUserName() + "'";
-            rs = statement.executeQuery(sql);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return rs;
-    }*/
-
-    /**
-     * 删除好友操作指令
-     *
-     * @param connections
-     * @param username
-     * @param friendName
-     */
-   /* public void delFri(Connections connections, String username, String friendName) {
-        Connection conn = connections.getCon();
-        Statement statement;
-        try {
-            statement = conn.createStatement();
-            String sql = "delete from friends where username = '" + username + "' and friendname = '" + friendName + "'";
-            statement.execute(sql);
-            String sql2 = "delete from friends where username = '" + friendName + "' and friendname = '" + username + "'";
-            statement.execute(sql2);
-            statement.close();
-            conn.close();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }*/
-
-    /**
-     * 增加好友操作指令
-     *
-     * @param connections
-     * @param username
-     * @param friendName
-     * @return
-     */
-    /*public boolean addFri(Connections connections, String username, String friendName) {
-        Connection conn = connections.getCon();
-        Statement statement = null;
-        ResultSet rs = null;
-        try {
-            statement = conn.createStatement();
-            String sql = "select * from userinfo where userName = '" + friendName + "'";
-            rs = statement.executeQuery(sql);
+            PreparedStatement stmt = conn.prepareStatement("SELECT alluser FROM chatroom WHERE roomid = ? limit 1");
+            stmt.setInt(1, roomId);
+            ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
-                String sql3 = "insert into friends (username, friendname) values ('" + username + "','" + friendName + "' )";
-                statement.execute(sql3);
-                String sql4 = "insert into friends (username, friendname) values ('" + friendName + "','" + username + "' )";
-                statement.execute(sql4);
-                System.out.println("插入好友成功");
-            } else {
-                return false;
+                allUser = rs.getString(1);
             }
-        } catch (SQLException e) {
+            rs.close();
+            stmt.close();
+        } catch (Exception e) {
             e.printStackTrace();
-        } finally {
-            try {
-                rs.close();
-                statement.close();
-                conn.close();
-            } catch (SQLException ee) {
-                ee.printStackTrace();
-            }
         }
-        return true;
-    }*/
+       return string_to_copylist(allUser);
+    }
+
+    /**
+     * 根据房间号获取所有历史消息
+     */
+    public CopyOnWriteArrayList<PieceMessage> getHistoryMessageByRoomId(int roomId){
+        Connection conn = connection.getCon();
+        CopyOnWriteArrayList<PieceMessage> allMessage = new CopyOnWriteArrayList<>();
+        try {
+            PreparedStatement stmt = conn.prepareStatement("SELECT * from chatroom where roomid = ?");
+            stmt.setInt(1, roomId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                PieceMessage message = new PieceMessage(rs.getInt(1),
+                        rs.getString(2),
+                        rs.getString(3),
+                        rs.getTimestamp(4).getTime(),
+                        rs.getString(5));
+                allMessage.add(message);
+            }
+            rs.close();
+            stmt.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return allMessage;
+    }
+
+    /**
+     *将聊天信息添加到数据库
+     */
+    public void addMessageToDatabase(Message message){
+        long timestemp = message.getTimestamp();
+        int roomid = message.getChatRoom().getRoomId();
+        String from = message.getSentFrom();
+        String data = message.getData();
+        String alluser = copyList_to_String(message.getChatRoom().getUserList());
+        Connection conn = connection.getCon();
+        try {
+            PreparedStatement stmt = conn.prepareStatement("insert into chatroom values (?,?,?,?,?)");
+            stmt.setInt(1, roomid);
+            stmt.setString(2,alluser);
+            stmt.setString(3,data);
+            stmt.setTimestamp(4,Timestamp.valueOf(String.valueOf(timestemp)));
+            stmt.setString(5,from);
+            stmt.executeUpdate();
+            stmt.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public String copyList_to_String(CopyOnWriteArrayList<String> list){
+        StringBuilder result = null;
+        for (int i = 0; i < list.size()-1; i++) {
+            result.append(list.get(i)).append(";");
+        }
+        result.append(list.get(list.size() - 1));
+        return result.toString();
+    }
+
+    public CopyOnWriteArrayList<String> string_to_copylist(String string){
+        String[] temp = string.split(";");
+        CopyOnWriteArrayList<String> result = new CopyOnWriteArrayList<>(Arrays.asList(temp));
+        return result;
+    }
+
+
+
 }

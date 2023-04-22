@@ -19,5 +19,13 @@ public class Main extends Application {
         stage.setScene(new Scene(fxmlLoader.load()));
         stage.setTitle("Chatting Client");
         stage.show();
+        Controller controller = fxmlLoader.getController();
+        stage.setOnCloseRequest(e -> {
+            try {
+                controller.shutdown();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
     }
 }

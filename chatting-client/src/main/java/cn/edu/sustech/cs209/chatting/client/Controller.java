@@ -1,37 +1,56 @@
 package cn.edu.sustech.cs209.chatting.client;
 
+import cn.edu.sustech.cs209.chatting.common.ChatRoom;
 import cn.edu.sustech.cs209.chatting.common.Message;
 import cn.edu.sustech.cs209.chatting.common.MessageType;
 import javafx.application.Platform;
+import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
 import javafx.util.Callback;
 import javafx.util.Pair;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.net.URL;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.ResourceBundle;
-import java.util.Scanner;
+import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Controller implements Initializable {
 
     private static Controller instance;
     @FXML
+    public Label currentOnlineCnt;
+    @FXML
+    public ListView roomUsers;
+    @FXML
+    public ListView chatList;
+    @FXML
+    public ListView onlineUsersList;
+    @FXML
+    public Label currentUsername;
+    @FXML
     ListView<Message> chatContentList;
+    @FXML
+    private TextArea inputArea;
+
     InputStream inputStream;
     OutputStream outputStream;
     Scanner in;
@@ -39,7 +58,13 @@ public class Controller implements Initializable {
     String username;
     String password;
     Socket socket;
-    ClientThread clientThread;
+    private static FileInputStream fileIn;
+    private static DataOutputStream DataOUT;
+    public static ClientThread clientThread;
+    public static Thread thread;
+    public CopyOnWriteArrayList<String> onlineUserList;
+    public CopyOnWriteArrayList<ChatRoom> chatRoomList;
+    public CopyOnWriteArrayList<String> roomUserList;
 
     public Controller() {
         instance = this;
@@ -91,10 +116,12 @@ public class Controller implements Initializable {
             if (dialogButton == loginButtonType) {
                 String username = usernameField.getText();
                 String password = passwordField.getText();
+                System.out.println(username + "  " + password);
                 if (!username.isEmpty() && !password.isEmpty()) {
                     // 开始一个新线程
-                    ClientThread clientThread = new ClientThread("127.0.0.1", 8588, username, password, this);
-                    new Thread(clientThread).start();
+                    clientThread = new ClientThread("127.0.0.1", 8588, username, password, this);
+                    thread = new Thread(clientThread);
+                    thread.start();
                 } else {
                     // 关闭当前Stage并退出应用程序
                     System.out.println("空");
@@ -134,8 +161,8 @@ public class Controller implements Initializable {
             // 在 UI 线程中弹出提示
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Error");
-            alert.setHeaderText("Password incorrect");
-            alert.setContentText("密码错误 and try again.");
+            alert.setHeaderText("登陆失败");
+            alert.setContentText("密码错误或账户已登录");
             alert.showAndWait();
             Platform.exit();
             /*try {
@@ -147,6 +174,85 @@ public class Controller implements Initializable {
             }*/
 
         });
+    }
+
+    @FXML
+    public void stopButtonAction(ActionEvent e) throws IOException {
+        shutdown();
+    }
+
+    /**
+     * 设置在线用户列表，并显示在线人数(需要在列表中排除本机用户)
+     *
+     * @param onlineUserList 用户集
+     */
+    public void setOnlineUserList(CopyOnWriteArrayList<String> onlineUserList) {
+
+        this.onlineUserList = onlineUserList;
+		/*
+		System.out.print("UserList:");
+		for(UserInfo user: userInfolist){
+			System.out.println(user.getUsername());
+		}
+		*/
+
+        //在线用户数量
+        int userCount = onlineUserList.size();
+
+        //本机用户不需要显示
+        for (String user : onlineUserList) {
+            if (user.equals(username)) {
+                onlineUserList.remove(user);
+                break;
+            }
+        }
+        //设置在线用户列表
+        Platform.runLater(() -> {
+
+            //数据源
+            ObservableList<String> users = FXCollections.observableList(onlineUserList);
+            onlineUsersList.setItems(users);
+            //自定义ListView
+            onlineUsersList.setCellFactory(new MyListCellFactory());
+
+            // Add items to the list
+            onlineUsersList.getItems().addAll(onlineUserList);
+
+            //设置在线用户人数
+            currentOnlineCnt.setText(userCount + "");
+        });
+    }
+
+
+    private static class MyListCellFactory implements Callback<ListView<String>, ListCell<String>> {
+        @Override
+        public ListCell<String> call(ListView<String> param) {
+            return new MyListCell();
+        }
+    }
+
+    private static class MyListCell extends ListCell<String> {
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            if (item == null || empty) {
+                setText(null);
+                setGraphic(null);
+            } else {
+                setText(item);
+                // Add custom graphic or icon if needed
+            }
+        }
+    }
+
+    public void shutdown() throws IOException {
+        Message message = new Message(System.currentTimeMillis(), username, null, null, null, MessageType.DISCONNECT);
+        if (clientThread != null) {
+            clientThread.send(message);
+            clientThread.getS().close();
+            clientThread.setExit(true);
+        }
+        System.exit(0);
     }
 
     @FXML
@@ -201,9 +307,64 @@ public class Controller implements Initializable {
         // TODO
     }
 
+    @FXML
+    private void selectFile() throws Exception {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select a file");
+        File file = fileChooser.showOpenDialog(inputArea.getScene().getWindow());
+        if (file != null) {
+            sendFile(file);
+        }
+    }
+
+    /**
+     * 向客户端传输文件
+     *
+     * @throws Exception
+     */
+    private void sendFile(File file) throws Exception {
+        try {
+            if (file.exists()) {
+                fileIn = new FileInputStream(file);
+                DataOUT = new DataOutputStream(clientThread.getS().getOutputStream());
+
+                //文件名和长度
+                DataOUT.writeUTF(file.getName());
+                DataOUT.flush();
+                DataOUT.writeLong(file.length());
+                DataOUT.flush();
+
+                //开始传输文件
+                System.out.println("=========Start to transfer=========");
+                byte[] bytes = new byte[1024];
+                int length = 0;
+                long progress = 0;
+                while ((length = fileIn.read(bytes, 0, bytes.length)) != -1) {
+                    DataOUT.write(bytes, 0, length);
+                    DataOUT.flush();
+                    progress += length;
+                    System.out.println("| " + (100 * progress / file.length()) + "% |");
+                }
+                System.out.println();
+                System.out.println("=====File transferred successfully=====");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {                                //关闭数据流
+            if (fileIn != null) {
+                fileIn.close();
+            }
+            if (DataOUT != null) {
+                DataOUT.close();
+            }
+        }
+    }
+
+
     public void setClientThread(ClientThread clientThread) {
         this.clientThread = clientThread;
         if (clientThread != null) {
+
             username = clientThread.getUserName();
             password = clientThread.getUserPassword();
         }
