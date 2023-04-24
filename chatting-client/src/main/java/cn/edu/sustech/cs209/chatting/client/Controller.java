@@ -39,12 +39,15 @@ public class Controller implements Initializable {
     private static Controller instance;
     public static int currentRoom = -1;
     ObservableList<Message> messages = FXCollections.observableArrayList();
-    public void setCurrentRoom(int room){
+
+    public void setCurrentRoom(int room) {
         currentRoom = room;
     }
-    public int getCurrentRoom(){
+
+    public int getCurrentRoom() {
         return currentRoom;
     }
+
     @FXML
     public Label currentOnlineCnt;
     @FXML
@@ -165,11 +168,11 @@ public class Controller implements Initializable {
             @Override
             public void handle(MouseEvent event) {
                 String selectedItem = chatList.getSelectionModel().getSelectedItem();
-                if (selectedItem!=null) {
+                if (selectedItem != null) {
                     List<String> a = Arrays.asList(selectedItem.split(";", -1));
                     CopyOnWriteArrayList<String> selectedUsers = new CopyOnWriteArrayList<>(a);
                     Message message = new Message(System.currentTimeMillis(), username, null, null, null, MessageType.CREATNEWROOM);
-                    ChatRoom tempRoom = new ChatRoom(-1,selectedUsers,null);
+                    ChatRoom tempRoom = new ChatRoom(-1, selectedUsers, null);
                     message.setChatRoom(tempRoom);
                     clientThread.send(message);
                     /*Message message = new Message(System.currentTimeMillis(), "", "", "", "1", MessageType.CREATNEWROOM);
@@ -212,6 +215,7 @@ public class Controller implements Initializable {
 
     /**
      * 设置在线用户列表，并显示在线人数(需要在列表中排除本机用户)
+     *
      * @param onlineUserList 用户集
      */
     public void setOnlineUserList(CopyOnWriteArrayList<String> onlineUserList) {
@@ -251,7 +255,7 @@ public class Controller implements Initializable {
             currentUsername.setText(username);
             //设置在线用户人数
             currentOnlineCnt.setText(userCount + "");
-          //  System.out.println(onlineUserList + "   66666");
+            //  System.out.println(onlineUserList + "   66666");
             onlineUsersList.setItems(FXCollections.observableArrayList(onlineUserList));
 
         });
@@ -282,7 +286,7 @@ public class Controller implements Initializable {
     public void shutdown() throws IOException {
         Message message = new Message(System.currentTimeMillis(), username, null, null, null, MessageType.DISCONNECT);
         if (clientThread != null) {
-           // System.out.println("111111111111");
+            // System.out.println("111111111111");
             clientThread.send(message);
             clientThread.setExit(true);
             //clientThread.getS().close();
@@ -296,8 +300,8 @@ public class Controller implements Initializable {
      * 更新聊天室列表
      */
 
-    public void refreshChatList(ArrayList<String> list){
-        Platform.runLater(()->{
+    public void refreshChatList(ArrayList<String> list) {
+        Platform.runLater(() -> {
             chatList.setItems(FXCollections.observableArrayList(list));
         });
     }
@@ -306,7 +310,7 @@ public class Controller implements Initializable {
     /**
      * 下载文件
      */
-    public void downloadFile(ActionEvent actionEvent){
+    public void downloadFile(ActionEvent actionEvent) {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("文件下载");
         dialog.setHeaderText(null);
@@ -316,9 +320,9 @@ public class Controller implements Initializable {
         if (result.isPresent()) {
             String fileName = result.get();
             // send request to server
-            Message m=new Message(System.currentTimeMillis(),username,null,null,"我下载了文件："+fileName,MessageType.ASKFORFILE);
+            Message m = new Message(System.currentTimeMillis(), username, null, null, "我下载了文件：" + fileName, MessageType.ASKFORFILE);
             m.setFilename(fileName);
-            ChatRoom chatRoom = new ChatRoom(currentRoom,null,null);
+            ChatRoom chatRoom = new ChatRoom(currentRoom, null, null);
             m.setChatRoom(chatRoom);
             clientThread.send(m);
         }
@@ -330,9 +334,9 @@ public class Controller implements Initializable {
     @FXML
     public void doSendMessage() {
         String text = inputArea.getText().trim(); // 获取输入框的文本内容
-        if (!text.isEmpty()& currentRoom!=-1) { // 确保输入内容不为空且选择过某个聊天
-            Message m=new Message(System.currentTimeMillis(),username,"","",text,MessageType.SENDMESSAGE);
-            ChatRoom tempRoom = new ChatRoom(currentRoom,null,null);
+        if (!text.isEmpty() & currentRoom != -1) { // 确保输入内容不为空且选择过某个聊天
+            Message m = new Message(System.currentTimeMillis(), username, "", "", text, MessageType.SENDMESSAGE);
+            ChatRoom tempRoom = new ChatRoom(currentRoom, null, null);
             m.setChatRoom(tempRoom);
             clientThread.send(m);
             inputArea.clear();
@@ -377,8 +381,8 @@ public class Controller implements Initializable {
             }
             if (x > 0) {
                 selectedUsers.add(username);
-                Message message = new Message(System.currentTimeMillis(), username, null, null, username+"创建了群聊", MessageType.CREATNEWROOM);
-                ChatRoom tempRoom = new ChatRoom(-1,selectedUsers,null);
+                Message message = new Message(System.currentTimeMillis(), username, null, null, username + "创建了群聊", MessageType.CREATNEWROOM);
+                ChatRoom tempRoom = new ChatRoom(-1, selectedUsers, null);
                 message.setChatRoom(tempRoom);
                 clientThread.send(message);
 
@@ -402,6 +406,7 @@ public class Controller implements Initializable {
 
     /**
      * 选择上传文件
+     *
      * @param actionEvent
      * @throws Exception
      */
@@ -414,18 +419,18 @@ public class Controller implements Initializable {
             sendFile(file);
         }*/
         FileChooser fileChooser = new FileChooser();
-        File selectedFile = fileChooser.showOpenDialog(new  Stage () );
+        File selectedFile = fileChooser.showOpenDialog(new Stage());
         if (selectedFile != null) {
             try {
                 byte[] fileContent = Files.readAllBytes(selectedFile.toPath());
                 //System.out.println(fileContent);
                 String encodedFile = Base64.getEncoder().encodeToString(fileContent);
-               // System.out.println(encodedFile);
-                String fileName=selectedFile.getName();
-                Message m=new Message(System.currentTimeMillis(),username,null,null,"我发了一个文件："+fileName,MessageType.SENDFIEL);
+                // System.out.println(encodedFile);
+                String fileName = selectedFile.getName();
+                Message m = new Message(System.currentTimeMillis(), username, null, null, "我发了一个文件：" + fileName, MessageType.SENDFIEL);
                 m.setFilename(fileName);
                 m.setFiledata(encodedFile);
-                ChatRoom chatRoom = new ChatRoom(currentRoom,null,null);
+                ChatRoom chatRoom = new ChatRoom(currentRoom, null, null);
                 m.setChatRoom(chatRoom);
                 clientThread.send(m);
             } catch (IOException e) {
@@ -478,10 +483,10 @@ public class Controller implements Initializable {
     }
 
     /**
-     *初始化聊天窗口内容
+     * 初始化聊天窗口内容
      */
-    public void initializeChatWindows(Message message){
-        Platform.runLater(() ->{
+    public void initializeChatWindows(Message message) {
+        Platform.runLater(() -> {
             messages.clear();
             messages.add(message);
             chatContentList.setItems(messages);
@@ -503,7 +508,7 @@ public class Controller implements Initializable {
 
         ListView<String> listView = new ListView<>();
         listView.setCellFactory(param -> new EmojiCell());
-        ObservableList<String> emojiList = FXCollections.observableArrayList("😊",  "👍", "❤ ","😂", "😊", "👍", "👎", "🤔", "😘", "😍", "🤩", "🙏", "👋", "💪", "🤢", "🤮", "🤯", "😱", "😴");
+        ObservableList<String> emojiList = FXCollections.observableArrayList("😊", "👍", "❤ ", "😂", "😊", "👍", "👎", "🤔", "😘", "😍", "🤩", "🙏", "👋", "💪", "🤢", "🤮", "🤯", "😱", "😴");
         listView.setItems(emojiList);
         listView.getSelectionModel().selectFirst();
 
@@ -526,10 +531,11 @@ public class Controller implements Initializable {
     /**
      * 服务器断开连接
      */
-    public void serverClose(){
+    public void serverClose() {
         thread.interrupt();
         Platform.exit();
     }
+
     /**
      * @param clientThread
      */
@@ -563,7 +569,7 @@ public class Controller implements Initializable {
 
                     for (int i = 0; i < msg.getAllHistoryMessage().size(); i++) {
                         HBox wrapper = new HBox();
-                        Label nameLabel = new Label(msg.getAllHistoryMessage().get(i).getFrom() );
+                        Label nameLabel = new Label(msg.getAllHistoryMessage().get(i).getFrom());
                         Label msgLabel = new Label(msg.getAllHistoryMessage().get(i).getContent());
 
 
