@@ -11,7 +11,10 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedList;
 import java.util.Scanner;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -35,7 +38,7 @@ public class ClientThread implements Runnable {
     private Scanner in;
     private PrintWriter out;
     private Controller controller;
-    private static String currentRoom;
+    private static int currentRoom;
 
     public void setExit(boolean exit) {
         this.exit = exit;
@@ -77,76 +80,105 @@ public class ClientThread implements Runnable {
 
     @Override
     public void run() {
-            try {
-                boolean iscon = true;
-                s = new Socket();
-                SocketAddress endpoint = new InetSocketAddress(hostName, port);
-                //设置连接超时时间
-                s.connect(endpoint, 5 * 1000);
-                br = new BufferedReader(new InputStreamReader(s.getInputStream(), "utf-8"));
-                ps = new PrintStream(s.getOutputStream());
-                if (s.isConnected()) {
-                    System.out.println("本机已成功连接服务器！下一步用户登录..");
-                }
-                connect();
+        try {
+            boolean iscon = true;
+            s = new Socket();
+            SocketAddress endpoint = new InetSocketAddress(hostName, port);
+            //设置连接超时时间
+            s.connect(endpoint, 5 * 1000);
+            br = new BufferedReader(new InputStreamReader(s.getInputStream(), "utf-8"));
+            ps = new PrintStream(s.getOutputStream());
+            if (s.isConnected()) {
+                System.out.println("本机已成功连接服务器！下一步用户登录..");
+            }
+            connect();
 
-                while (!s.isClosed() && s.isConnected()  && !exit) {
-                    //System.out.println(!s.isClosed()+" "+ s.isConnected() +" "+!exit);
-                    String serverMessage = br.readLine();
-                    // System.out.println(serverMessage);
-                    if (serverMessage != null) {
-                        System.out.println("收到服务器消息.." + serverMessage + " 对数据进行解析并做响应中..");
-                        Message message = Message.fromJson(serverMessage);
-                        switch (message.getType()) {
-                            case SUCCESS:
-                                controller.setClientThread(this);
-                              //  System.out.println(message.getNowUserList());
-                                controller.setOnlineUserList(message.getNowUserList());
-                                System.out.println("用户登录成功！");
-                                break;
-                            case FAIL:
-                                System.out.println("用户登陆失败！");
-                                controller.failLogin();
-                                s.close();
-                                break;
-                            case NEWCLIENTJION:
-                                System.out.println("新用户加入，更新在线用户列表");
-                                controller.setOnlineUserList(message.getNowUserList());
-                                break;
-                            case SOMEONELEAVE:
-                                System.out.println("有用户退出，更新在线列表");
-                                controller.setOnlineUserList(message.getNowUserList());
-                                break;
-                            case REFRESHCHATTHINGWINDOWS:
-                                System.out.println("更新聊天界面");
-                                break;
-                            case REFRESHCHATLIST:
-                                System.out.println("更新聊天列表");
-                                CopyOnWriteArrayList<ChatRoom> rooms = message.getRoomlist();
-                                ArrayList<String> roomnameByNumbers = new ArrayList<>();
-                                for (ChatRoom room : rooms) {
-                                    roomnameByNumbers.add(list_to_string(room.getUserList()));
+            while (!s.isClosed() && s.isConnected() && !exit) {
+                //System.out.println(!s.isClosed()+" "+ s.isConnected() +" "+!exit);
+                String serverMessage = br.readLine();
+                // System.out.println(serverMessage);
+                if (serverMessage != null) {
+                    System.out.println("收到服务器消息.." + serverMessage + " 对数据进行解析并做响应中..");
+                    Message message = Message.fromJson(serverMessage);
+                    switch (message.getType()) {
+                        case SUCCESS:
+                            controller.setClientThread(this);
+                            //  System.out.println(message.getNowUserList());
+                            controller.setOnlineUserList(message.getNowUserList());
+                            System.out.println("用户登录成功！");
+                            break;
+                        case FAIL:
+                            System.out.println("用户登陆失败！");
+                            controller.failLogin();
+                            s.close();
+                            break;
+                        case NEWCLIENTJION:
+                            System.out.println("新用户加入，更新在线用户列表");
+                            controller.setOnlineUserList(message.getNowUserList());
+                            break;
+                        case SOMEONELEAVE:
+                            System.out.println("有用户退出，更新在线列表");
+                            controller.setOnlineUserList(message.getNowUserList());
+                            break;
+                        case REFRESHCHATTHINGWINDOWS:
+                            controller.setCurrentRoom(message.getChatRoom().getRoomId());
+                            System.out.println("更新聊天界面");
+                            controller.initializeChatWindows(message);
+                            break;
+                        case REFRESHCHATLIST:
+                            System.out.println("更新聊天列表");
+                            CopyOnWriteArrayList<ChatRoom> rooms = message.getRoomlist();
+                            ArrayList<String> roomnameByNumbers = new ArrayList<>();
+                            if (rooms != null) {
+                                for (int i = 0; i < rooms.size(); i++) {
+                                    roomnameByNumbers.add(list_to_string(rooms.get(i).getUserList()));
                                 }
-                               controller.refreshChatList(roomnameByNumbers);
-
-                            default:
-                                break;
-                        }
+                                controller.refreshChatList(roomnameByNumbers);
+                            }
+                            break;
+                        case RECIEVE:
+                            CopyOnWriteArrayList<ChatRoom> rooms1 = message.getRoomlist();
+                            ArrayList<String> roomnameByNumbers1 = new ArrayList<>();
+                            if (rooms1 != null) {
+                                System.out.println("收到消息，更新聊天列表");
+                                for (int i = 0; i < rooms1.size(); i++) {
+                                    roomnameByNumbers1.add(list_to_string(rooms1.get(i).getUserList()));
+                                }
+                                controller.refreshChatList(roomnameByNumbers1);
+                            }
+                            if (message.getChatRoom().getRoomId() == controller.getCurrentRoom()) {
+                                System.out.println("收到消息，更新聊天界面");
+                                controller.initializeChatWindows(message);
+                            }
+                            break;
+                        case RECIEVEFILE:
+                            System.out.println("成功接收文件");
+                            String encodedFile = message.getFiledata();
+                            String fileName = message.getFilename();
+                            String path = "D:\\Java2\\A4\\chatting-client\\src\\main\\java\\AllFile\\" + fileName;
+                            byte[] fileContent = Base64.getDecoder().decode(encodedFile);
+                            Files.write(Paths.get(path), fileContent);
+                            break;
+                        default:
+                            break;
                     }
                 }
+            }
 
-            } catch (SocketTimeoutException ex) {
-                ex.printStackTrace();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }finally {
-                try {
-                    s.close();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+        } catch (SocketTimeoutException ex) {
+            System.out.println(111);
+            ex.printStackTrace();
+        } catch (Exception e) {
+            System.out.println("服务器宕机了！！！！！！！！");
+            controller.serverClose();
+        } finally {
+            try {
+                s.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
         }
+    }
 
 
     /**
@@ -174,12 +206,12 @@ public class ClientThread implements Runnable {
         ps.println(JSON);
     }
 
-    public static String list_to_string(CopyOnWriteArrayList<String> list){
+    public static String list_to_string(CopyOnWriteArrayList<String> list) {
         StringBuilder s = new StringBuilder();
-        for (int i = 0; i < list.size()-1; i++) {
-            s.append(list.get(i));
+        for (int i = 0; i < list.size() - 1; i++) {
+            s.append(list.get(i)).append(";");
         }
-        s.append(list.get(list.size()-1));
+        s.append(list.get(list.size() - 1));
         return s.toString();
     }
 

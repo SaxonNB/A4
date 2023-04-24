@@ -6,9 +6,10 @@ public class PieceMessage {
     private String content;
     private long sendtime;
     private String from;
-    public PieceMessage(int roomid, String alluser, String content, long sendtime, String from){
+
+    public PieceMessage(int roomid, String alluser, String content, long sendtime, String from) {
         this.roomid = roomid;
-        this.alluser =alluser;
+        this.alluser = alluser;
         this.content = content;
         this.sendtime = sendtime;
         this.from = from;

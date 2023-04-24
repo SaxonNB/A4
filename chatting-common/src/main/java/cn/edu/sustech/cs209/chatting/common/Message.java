@@ -21,8 +21,24 @@ public class Message {
     private CopyOnWriteArrayList<String> nowUserList;
     private CopyOnWriteArrayList<PieceMessage> allHistoryMessage;
     private CopyOnWriteArrayList<ChatRoom> roomlist;
+    private String filename;
+    private String filedata;
 
+    public String getFiledata() {
+        return filedata;
+    }
 
+    public void setFiledata(String filedata) {
+        this.filedata = filedata;
+    }
+
+    public void setFilename(String filename) {
+        this.filename = filename;
+    }
+
+    public String getFilename() {
+        return filename;
+    }
 
     public Message(Long timestamp, String sentFrom, String password, String sendTo, String data, MessageType type) {
         this.timestamp = timestamp;

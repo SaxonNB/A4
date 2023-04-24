@@ -6,14 +6,18 @@ import cn.edu.sustech.cs209.chatting.common.Message;
 import cn.edu.sustech.cs209.chatting.common.MessageType;
 import cn.edu.sustech.cs209.chatting.common.PieceMessage;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +34,8 @@ public class Server {
 
     public static void main(String[] args) throws IOException {
         ServerSocket serverSocket = new ServerSocket(8588);
+        int a = 0;
+        Scanner end = new Scanner(System.in);
         while (true) {
             Socket socket = serverSocket.accept();
             System.out.println(socket.getInetAddress() + "连接上了本服务器");
@@ -64,7 +70,9 @@ public class Server {
             try {
                 in = new Scanner(socket.getInputStream());
                 selfout = new PrintWriter(socket.getOutputStream());
-                doService(in, selfout);
+                Scanner end = new Scanner(System.in);
+                Service(in, selfout);
+               // System.out.println("hasdhsjkdhjkshdjhdak");
             } catch (SocketException se) { /*处理用户断开的异常*/
                 System.out.println("处理用户断开的异常");
 
@@ -84,10 +92,10 @@ public class Server {
 
         }
 
-        public static void doService(Scanner in, PrintWriter selfout) throws ParseException {
+        public static void Service(Scanner in, PrintWriter selfout) throws ParseException, IOException {
             exit:
             while (true) {
-                System.out.println(in.hasNext());
+                //System.out.println(in.hasNext());
                 if (in.hasNext()) {
                     String line = in.nextLine();
                     Message message = Message.fromJson(line);
@@ -163,17 +171,20 @@ public class Server {
                          * 判断toname端是否在线，若在线，给toname端发送聊天室所有消息
                          */
                         case SENDMESSAGE:
+                            message.getChatRoom().setUserList(jdbc.getAllUserByRoomId(message.getChatRoom().getRoomId()));
                             jdbc.addMessageToDatabase(message);
-                            CopyOnWriteArrayList<String> toname = message.getChatRoom().getUserList();
-                            String alluser = jdbc.copyList_to_String(toname);
-                            CopyOnWriteArrayList<PieceMessage> allMessage = jdbc.getHistoryMessageByAllUser(alluser);
-                            for (int i = 0; i < toname.size(); i++) {
-                                String tempName = toname.get(i);
-                                Message message1 = new Message(System.currentTimeMillis(), null, null, tempName, null, MessageType.REFRESHCHATTHINGWINDOWS);
-                                message1.setAllHistoryMessage(allMessage);
-                                if (clientList.contains(tempName)) {
-                                    name_To_printer.get(tempName).println();
-                                    name_To_printer.get(tempName).flush();
+                            String allusers = jdbc.copyList_to_String(message.getChatRoom().getUserList());
+                            CopyOnWriteArrayList<String> roomUsers = message.getChatRoom().getUserList();
+                            for (int i = 0; i < roomUsers.size(); i++) {
+                                if (clientList.contains(roomUsers.get(i))){
+                                    CopyOnWriteArrayList<ChatRoom> rooms = jdbc.getAllRoomByName(roomUsers.get(i));
+                                    Message message1 = new Message(message.getTimestamp(), message.getSentFrom(),null,null,null,MessageType.RECIEVE);
+                                    message1.setRoomlist(rooms);
+                                    ChatRoom room = new ChatRoom(message.getChatRoom().getRoomId(),null,null);
+                                    CopyOnWriteArrayList<PieceMessage> allMessages = jdbc.getHistoryMessageByRoomId(message.getChatRoom().getRoomId());
+                                    message1.setAllHistoryMessage(allMessages);
+                                    message1.setChatRoom(room);
+                                    send(message1,name_To_printer.get(roomUsers.get(i)));
                                 }
                             }
                             break;
@@ -184,18 +195,87 @@ public class Server {
                          * 给聊天室中在线用户发消息，添加一个room
                          */
                         case CREATNEWROOM:
-                            jdbc.addMessageToDatabase(message);
-                            CopyOnWriteArrayList<String> roomUsers = message.getChatRoom().getUserList();
-                            String allusers = jdbc.copyList_to_String(roomUsers);
-                            CopyOnWriteArrayList<PieceMessage> allMessages = jdbc.getHistoryMessageByAllUser(allusers);
-
-                            Message message2 = new Message(message.getTimestamp(), message.getSentFrom(), null, null, null, MessageType.REFRESHCHATLIST);
-                            ChatRoom chatRoom = new ChatRoom(message.getChatRoom().getRoomId(), roomUsers, pieceList_to_stringList(allMessages));
-                            message2.setChatRoom(chatRoom);
-                            sendToMany(message2, roomUsers);
+                            //System.out.println(message.getChatRoom().getUserList()+"0000000");
+                            String allusers2 = jdbc.copyList_to_String(message.getChatRoom().getUserList());
+                            if (!jdbc.checkRoomExist(allusers2)) {
+                                int newroomid = jdbc.getnewRoomId();
+                                message.getChatRoom().setRoomId(newroomid);
+                                jdbc.addMessageToDatabase(message);
+                            }else {
+                                message.getChatRoom().setRoomId(jdbc.getRoomIdByAlluser(allusers2));
+                            }
+                            CopyOnWriteArrayList<String> roomUsers1 = message.getChatRoom().getUserList();
+                            for (int i = 0; i < roomUsers1.size(); i++) {
+                                if (clientList.contains(roomUsers1.get(i))){
+                                    CopyOnWriteArrayList<ChatRoom> rooms = jdbc.getAllRoomByName(roomUsers1.get(i));
+                                    Message message1 = new Message(message.getTimestamp(), message.getSentFrom(),null,null,null,MessageType.REFRESHCHATLIST);
+                                    message1.setRoomlist(rooms);
+                                    send(message1,name_To_printer.get(roomUsers1.get(i)));
+                                    Message message2 = new Message(message.getTimestamp(), message.getSentFrom(),null,roomUsers1.get(i),null,MessageType.REFRESHCHATTHINGWINDOWS);
+                                    ChatRoom room = new ChatRoom(message.getChatRoom().getRoomId(),null,null);
+                                    CopyOnWriteArrayList<PieceMessage> allMessages = jdbc.getHistoryMessageByRoomId(message.getChatRoom().getRoomId());
+                                    message2.setAllHistoryMessage(allMessages);
+                                    message2.setChatRoom(room);
+                                    send(message2,name_To_printer.get(roomUsers1.get(i)));
+                                }
+                            }
                             break;
+                        /**
+                         * 将客户端发送的文件存在服务器中
+                         */
+                        case SENDFIEL:
+                            String filename = message.getFilename();
+                            String filedata = message.getFiledata();
+                            byte[] filecontent = Base64.getDecoder().decode(filedata);
+                            try {
+                                String path = "D:\\Java2\\A4\\chatting-server\\src\\main\\java\\AllFile\\"+filename;
+                                Files.write(Paths.get(path),filecontent);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                            CopyOnWriteArrayList<String> alluse = jdbc.getAllUserByRoomId(message.getChatRoom().getRoomId());
+                            message.getChatRoom().setUserList(alluse);
+                            jdbc.addMessageToDatabase(message);
+                            for (int i = 0; i < alluse.size(); i++) {
+                                if (clientList.contains(alluse.get(i))){
+                                    CopyOnWriteArrayList<ChatRoom> rooms = jdbc.getAllRoomByName(alluse.get(i));
+                                    Message message1 = new Message(message.getTimestamp(), message.getSentFrom(),null,null,null,MessageType.RECIEVE);
+                                    message1.setRoomlist(rooms);
+                                    ChatRoom room = new ChatRoom(message.getChatRoom().getRoomId(),null,null);
+                                    CopyOnWriteArrayList<PieceMessage> allMessages = jdbc.getHistoryMessageByRoomId(message.getChatRoom().getRoomId());
+                                    message1.setAllHistoryMessage(allMessages);
+                                    message1.setChatRoom(room);
+                                    send(message1,name_To_printer.get(alluse.get(i)));
+                                }
+                            }
+                            break;
+                        case ASKFORFILE:
+                            CopyOnWriteArrayList<String> alluse1 = jdbc.getAllUserByRoomId(message.getChatRoom().getRoomId());
+                            message.getChatRoom().setUserList(alluse1);
+                            jdbc.addMessageToDatabase(message);
+                            for (int i = 0; i < alluse1.size(); i++) {
+                                if (clientList.contains(alluse1.get(i))){
+                                    CopyOnWriteArrayList<ChatRoom> rooms = jdbc.getAllRoomByName(alluse1.get(i));
+                                    Message message1 = new Message(message.getTimestamp(), message.getSentFrom(),null,null,null,MessageType.RECIEVE);
+                                    message1.setRoomlist(rooms);
+                                    ChatRoom room = new ChatRoom(message.getChatRoom().getRoomId(),null,null);
+                                    CopyOnWriteArrayList<PieceMessage> allMessages = jdbc.getHistoryMessageByRoomId(message.getChatRoom().getRoomId());
+                                    message1.setAllHistoryMessage(allMessages);
+                                    message1.setChatRoom(room);
+                                    send(message1,name_To_printer.get(alluse1.get(i)));
+                                }
+                            }
+                            String path = "D:\\Java2\\A4\\chatting-server\\src\\main\\java\\AllFile\\"+message.getFilename();
+                            File file = new File(path);
+                            byte[] fileContent1 = Files.readAllBytes(file.toPath());
+                            String encodedFile1 = Base64.getEncoder().encodeToString(fileContent1);
+                            Message m=new Message(System.currentTimeMillis(),null,null,null,null,MessageType.RECIEVEFILE);
+                            m.setFilename(message.getFilename());
+                            m.setFiledata(encodedFile1);
+                            send(m,name_To_printer.get(message.getSentFrom()));
 
 
+                            break ;
                         default:
                             break;
                     }
